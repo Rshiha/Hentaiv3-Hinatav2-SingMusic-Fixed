@@ -1,0 +1,7 @@
+__pycache__/
+*.pyc
+ig_settings.json
+account.txt
+cookies.txt
+data/*.json
+/tmp/

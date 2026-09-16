@@ -1,0 +1,9 @@
+services:
+  - type: web
+    name: instagoat
+    runtime: docker
+    plan: free
+    healthCheckPath: /
+    envVars:
+      - key: IG_SESSIONID
+        sync: false

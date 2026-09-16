@@ -1,0 +1,18 @@
+{
+  "botName": "Your Father Shihab",
+  "prefix": ".",
+  "language": "en",
+  "cooldown": {
+    "default": 2
+  },
+  "adminBot": [],
+  "hideNotiMessage": {
+    "commandNotFound": false,
+    "onlyAdminBot": false
+  },
+  "whiteList": {
+    "enable": false,
+    "userIDs": [],
+    "threadIDs": []
+  }
+}

@@ -1,0 +1,10 @@
+Flask>=3.0,<4.0
+gunicorn>=23.0,<24.0
+instagrapi>=2.2,<3.0
+requests>=2.32,<3.0
+yt-dlp>=2024.12.23
+beautifulsoup4
+Pillow>=10.0,<11.0
+g4f
+nest_asyncio
+
