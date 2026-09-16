@@ -11,31 +11,17 @@ except Exception as e:
 
 nest_asyncio.apply()
 
-
 # =========================
 # INSTAGRAPI DM CRASH FIX
 # =========================
-# মাঝে মাঝে Instagram DM-এর shared media (reel/post) এর video_url আসে
-# "instagram://direct_media..." স্কিমে, কিন্তু instagrapi-র pydantic model
-# খালি http/https accept করে। এতে client.direct_threads() পুরোটাই crash
-# করে এবং bot অনন্তকাল retry loop-এ আটকে থাকে। তাই raw API response
-# আসার সাথে সাথেই এইসব bad-scheme URL খালি করে দেওয়া হচ্ছে, pydantic
-# validation-এর আগেই — main.py-তে হাত না দিয়েই fix করার জন্য এটা এখানে।
 try:
     from instagrapi import Client as _IGClient
-
     if not getattr(_IGClient, "_dm_url_patch_applied", False):
         _original_private_request = _IGClient.private_request
-
         def _sanitize_bad_urls(obj):
             if isinstance(obj, dict):
                 for k, v in obj.items():
-                    if (
-                        isinstance(v, str)
-                        and "url" in k.lower()
-                        and "://" in v
-                        and not v.startswith(("http://", "https://"))
-                    ):
+                    if (isinstance(v, str) and "url" in k.lower() and "://" in v and not v.startswith(("http://", "https://"))):
                         obj[k] = ""
                     elif isinstance(v, (dict, list)):
                         _sanitize_bad_urls(v)
@@ -43,29 +29,39 @@ try:
                 for item in obj:
                     _sanitize_bad_urls(item)
             return obj
-
         def _patched_private_request(self, endpoint, *args, **kwargs):
             result = _original_private_request(self, endpoint, *args, **kwargs)
             if isinstance(result, dict):
                 _sanitize_bad_urls(result)
             return result
-
         _IGClient.private_request = _patched_private_request
         _IGClient._dm_url_patch_applied = True
         print("🩹 instagrapi DM url-scheme patch applied", flush=True)
 except Exception as e:
     print(f"DM URL PATCH ERR: {e}", flush=True)
 
+# === BANGLISH SYSTEM PROMPT ===
+SYSTEM_PROMPT = """Tumi ekta funny Bengali friend, naam tomar BakaBot.
+Rule:
+- SOB SOMOY Banglish e reply diba (Bangla kotha English okkhor e). Kokhono pure English bolba na like 'Sure thing', 'Of course', 'How can I help'.
+- Style: choto, moja kore, friendly, 1-3 line er moddhe. Beshi boro rochona likhba na.
+- Emoji majhe majhe use korba 🖤😅
+- User ja bolbe tar reply Banglish e diba."""
 
 def get_ai_reply(text: str, history=None) -> str:
-    """main.py's .ai command / auto-reply ei function ke call kore.
-    g4f agee try kore, fail korle key-chara Pollinations diye backup."""
+    """main.py's.ai command / auto-reply ei function ke call kore."""
+    # g4f er jonno system prompt soho message banano
+    messages = [{"role": "system", "content": SYSTEM_PROMPT}]
+    if history:
+        messages.extend(history[-30:])
+    messages.append({"role": "user", "content": text})
+
     try:
         if client is None:
             raise RuntimeError("g4f is not installed")
         response = client.chat.completions.create(
             model="gpt-4o-mini",
-            messages=((history or []) + [{"role": "user", "content": text}])[-31:],
+            messages=messages,
             web_search=False,
         )
         result = response.choices[0].message.content
@@ -74,51 +70,38 @@ def get_ai_reply(text: str, history=None) -> str:
     except Exception as e:
         print(f"AI TEXT (g4f) ERR: {e}", flush=True)
 
-    # --- backup: Pollinations (key lage na) ---
+    # --- backup: Pollinations (key lage na) - prompt er sathe system jure deya ---
     try:
+        combined_prompt = f"{SYSTEM_PROMPT}\n\nUser: {text}\nBakaBot:"
         r = requests.get(
-            f"https://text.pollinations.ai/{requests.utils.quote(text)}",
+            f"https://text.pollinations.ai/{requests.utils.quote(combined_prompt)}",
             timeout=15,
         )
-        if r.status_code == 200 and len(r.text.strip()) > 2:
+        if r.status_code == 200 and len(r.text.strip()) > 2 and "budget" not in r.text.lower():
             return r.text.strip()
     except Exception as e:
         print(f"AI TEXT (pollinations) ERR: {e}", flush=True)
 
-    return "এই মুহূর্তে ফ্রি এআই সার্ভিসটি ব্যস্ত আছে।"
-
+    return "Areh ektu busy achi re, ektu pore bol 🖤"
 
 def generate_pic(prompt: str):
-    """main.py's .img/.pic command ei function ke call kore.
-    Return kore image file path (main.py nijei send + delete kore),
-    fail hole None. g4f agee try kore, fail korle key-chara
-    Pollinations diye backup."""
+    """main.py's.img/.pic command ei function ke call kore."""
     try:
         if client is None:
             raise RuntimeError("g4f is not installed")
-        response = client.images.generate(
-            model="flux",
-            prompt=prompt,
-        )
+        response = client.images.generate(model="flux", prompt=prompt)
         image_url = response.data[0].url
         img_data = requests.get(image_url, timeout=20).content
-
         file_path = f"/tmp/gen_img_{os.getpid()}_{abs(hash(prompt)) % 100000}.jpg"
         with open(file_path, "wb") as f:
             f.write(img_data)
-
         return file_path
     except Exception as e:
         print(f"AI IMG (g4f) ERR: {e}", flush=True)
 
-    # --- backup: Pollinations image (key lage na) ---
     try:
-        url = (
-            "https://image.pollinations.ai/prompt/"
-            f"{requests.utils.quote(prompt)}?width=768&height=768&nologo=true"
-        )
+        url = f"https://image.pollinations.ai/prompt/{requests.utils.quote(prompt)}?width=768&height=768&nologo=true"
         r = requests.get(url, timeout=30)
-
         if r.status_code == 200 and r.content and len(r.content) > 500:
             file_path = f"/tmp/gen_img_{os.getpid()}_{abs(hash(prompt)) % 100000}.jpg"
             with open(file_path, "wb") as f:
@@ -126,5 +109,4 @@ def generate_pic(prompt: str):
             return file_path
     except Exception as e:
         print(f"AI IMG (pollinations) ERR: {e}", flush=True)
-
     return None
