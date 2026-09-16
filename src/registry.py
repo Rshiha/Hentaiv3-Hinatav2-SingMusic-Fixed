@@ -77,6 +77,15 @@ class Registry:
 
 
 def _load_module(path, module_name):
+    # Reuse an already-imported module. This is important for modules such
+    # as commands.legacy.media that keep shared state (PENDING_SEARCH).
+    # Modern commands can import it before the legacy loader reaches it;
+    # creating a second module instance would split that state and make a
+    # later numeric song selection appear to have no pending search.
+    existing = sys.modules.get(module_name)
+    if existing is not None:
+        return existing
+
     spec = importlib.util.spec_from_file_location(module_name, path)
     module = importlib.util.module_from_spec(spec)
     sys.modules[module_name] = module
@@ -193,3 +202,4 @@ def load_all(config=None):
         flush=True,
     )
     return registry
+           
