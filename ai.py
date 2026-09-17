@@ -40,22 +40,26 @@ try:
 except Exception as e:
     print(f"DM URL PATCH ERR: {e}", flush=True)
 
-# === BANGLISH SYSTEM PROMPT ===
-SYSTEM_PROMPT = """Tumi ekta funny Bengali friend, naam tomar BakaBot.
-Rule:
-- SOB SOMOY Banglish e reply diba (Bangla kotha English okkhor e). Kokhono pure English bolba na like 'Sure thing', 'Of course', 'How can I help'.
-- Style: choto, moja kore, friendly, 1-3 line er moddhe. Beshi boro rochona likhba na.
-- Emoji majhe majhe use korba 🖤😅
-- User ja bolbe tar reply Banglish e diba."""
+# === MULTI-LANGUAGE SYSTEM PROMPT ===
+SYSTEM_PROMPT = """Tumi BakaBot, ekta friendly Bengali AI.
+
+LANGUAGE RULE (must follow):
+- User je language e likhbe, tumi sei language ei reply diba.
+- User jodi Banglish e likhe (like 'kemon acho, valo nei'), tahole tumi SUDHU BANGLA okkhor e reply diba (যেমন: 'কেমন আছো? কি হয়েছে?')
+- User jodi Bangla te likhe (বাংলা), tahole Bangla tei reply diba.
+- User jodi English e likhe, tahole English e reply diba.
+- Onno kono language (Hindi, Arabic) hole sei language ei reply diba.
+- Banglish e reply diba NA, jodi na paro tahole Bangla te likhba. Kokhono 'Sure thing' type er boro English lecture diba na.
+- Reply choto rakho, 1-2 line, friendly, emoji use korte paro 🖤
+
+Context bujhe reply diba, ulta-palta irrelevant kotha bolba na.
+"""
 
 def get_ai_reply(text: str, history=None) -> str:
-    """main.py's.ai command / auto-reply ei function ke call kore."""
-    # g4f er jonno system prompt soho message banano
     messages = [{"role": "system", "content": SYSTEM_PROMPT}]
     if history:
         messages.extend(history[-30:])
     messages.append({"role": "user", "content": text})
-
     try:
         if client is None:
             raise RuntimeError("g4f is not installed")
@@ -70,9 +74,8 @@ def get_ai_reply(text: str, history=None) -> str:
     except Exception as e:
         print(f"AI TEXT (g4f) ERR: {e}", flush=True)
 
-    # --- backup: Pollinations (key lage na) - prompt er sathe system jure deya ---
     try:
-        combined_prompt = f"{SYSTEM_PROMPT}\n\nUser: {text}\nBakaBot:"
+        combined_prompt = f"{SYSTEM_PROMPT}\n\nUser: {text}\nBakaBot er reply (user er language ei):"
         r = requests.get(
             f"https://text.pollinations.ai/{requests.utils.quote(combined_prompt)}",
             timeout=15,
@@ -82,10 +85,9 @@ def get_ai_reply(text: str, history=None) -> str:
     except Exception as e:
         print(f"AI TEXT (pollinations) ERR: {e}", flush=True)
 
-    return "Areh ektu busy achi re, ektu pore bol 🖤"
+    return "এই মুহূর্তে একটু ব্যস্ত আছি, একটু পরে বলো 🖤"
 
 def generate_pic(prompt: str):
-    """main.py's.img/.pic command ei function ke call kore."""
     try:
         if client is None:
             raise RuntimeError("g4f is not installed")
@@ -98,7 +100,6 @@ def generate_pic(prompt: str):
         return file_path
     except Exception as e:
         print(f"AI IMG (g4f) ERR: {e}", flush=True)
-
     try:
         url = f"https://image.pollinations.ai/prompt/{requests.utils.quote(prompt)}?width=768&height=768&nologo=true"
         r = requests.get(url, timeout=30)
