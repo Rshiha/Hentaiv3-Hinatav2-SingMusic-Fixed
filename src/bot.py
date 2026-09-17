@@ -1,8 +1,7 @@
 """
-Instagram login + DM polling loop.
+Instagram login + DM polling loop (Optimized for 5 seconds interval).
 Python port of the original main.py run_bot()/message_worker(), with
-process_message() replaced by src.dispatcher.Dispatcher (which fans out to
-event scripts and the command registry instead of one giant if/elif chain).
+process_message() replaced by src.dispatcher.Dispatcher.
 """
 
 import os
@@ -22,7 +21,9 @@ from src.registry import load_all
 SETTINGS_FILE = os.path.join(
     os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "ig_settings.json"
 )
-POLL_INTERVAL = int(os.getenv("POLL_INTERVAL", "15"))
+
+# এখানে ইন্টারভ্যাল ৫ সেকেন্ড ফিক্সড করে দেওয়া হলো
+POLL_INTERVAL = 5
 
 IG_LOCK = threading.Lock()
 MESSAGE_QUEUE = queue.Queue()
@@ -79,7 +80,9 @@ def run_bot():
 
     session_id = urllib.parse.unquote(session_id.strip().strip('"').strip("'"))
     client = Client()
-    client.delay_range = [3, 7]
+    
+    # রিকোয়েস্টগুলোর মধ্যকার ইন্টারনাল ডিলে রেঞ্জ কমানো হলো যাতে রেসপন্স ফাস্ট হয়
+    client.delay_range = [1, 3]
 
     if os.path.exists(SETTINGS_FILE):
         try:
@@ -100,7 +103,7 @@ def run_bot():
         BOT_USERNAME = getattr(client, "username", "Unknown")
         BOT_RUNNING = True
         logger.success("LOGIN", f"🎉 LOGIN SUCCESS: @{BOT_USERNAME}")
-        logger.info("LOGIN", f"⏱️ Poll interval: {POLL_INTERVAL}s")
+        logger.info("LOGIN", f"⏱️ Poll interval set to: {POLL_INTERVAL}s")
 
     except Exception as e:
         BOT_RUNNING = False
@@ -113,7 +116,8 @@ def run_bot():
     try:
         logger.info("DM", "📨 Loading initial DM threads...")
         with IG_LOCK:
-            threads = client.direct_threads(amount=20, thread_message_limit=25)
+            # ৫ সেকেন্ড পর পর চেক করার জন্য থ্রেড অ্যামাউন্ট কমিয়ে ১০ করা হলো (স্পিড বুস্টের জন্য)
+            threads = client.direct_threads(amount=10, thread_message_limit=5)
         for thread in threads:
             try:
                 if thread.messages:
@@ -123,7 +127,7 @@ def run_bot():
         logger.success("DM", f"✅ Initial DM loaded: {len(last_messages)} threads")
     except Exception as e:
         logger.warn("DM", f"⚠️ INITIAL DM LOAD FAILED: {repr(e)}")
-        time.sleep(60 if is_instagram_403(e) else 15)
+        time.sleep(15)
 
     errors = 0
     last_403_log = 0
@@ -131,7 +135,8 @@ def run_bot():
     while True:
         try:
             with IG_LOCK:
-                threads = client.direct_threads(amount=20, thread_message_limit=25)
+                # ৫ সেকেন্ড লুপের জন্য থ্রেডের সংখ্যা অপ্টিমাইজড (amount=10) করা হয়েছে, যাতে সার্ভার ব্লক না করে
+                threads = client.direct_threads(amount=10, thread_message_limit=5)
             errors = 0
 
             for thread in threads:
@@ -166,16 +171,16 @@ def run_bot():
                 if now - last_403_log >= 60:
                     logger.warn("DM", f"⚠️ Instagram 403/1404006: {repr(e)}")
                     last_403_log = now
-                wait = min(600, 60 * max(1, min(errors, 10)))
-                logger.warn("DM", f"⏳ retry in {wait}s (attempt {errors})")
+                wait = min(600, 30 * max(1, min(errors, 10)))
+                logger.warn("DM", f"⏳ rate limit block - retry in {wait}s")
                 time.sleep(wait)
                 continue
 
             logger.error("DM", "FULL ERROR", e)
-            wait = min(120, 10 + (errors * 10))
-            logger.warn("DM", f"⚠️ DM loop error — retry {wait}s later")
+            wait = min(60, 5 + (errors * 5))
             time.sleep(wait)
 
+        # লুপটি প্রতি ৫ সেকেন্ড পর পর ঘুরবে
         time.sleep(POLL_INTERVAL)
 
 
@@ -193,3 +198,4 @@ def status():
         "commands": len(REGISTRY.commands),
         "events": len(REGISTRY.events),
     }
+    
